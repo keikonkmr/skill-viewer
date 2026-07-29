@@ -1,0 +1,14 @@
+const DEFAULT_CSV =
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vRUAzu0sXtYQoWYZVdZRtW9MA69yNN1CigkV6sptWMOWodWj4s2Um-A9dvtlPREaVBKAG2sTMZopi27/pub?gid=1231020551&single=true&output=csv";
+
+(function init(){
+    const params = new URLSearchParams(location.search);
+    const sheetUrl = params.get("sheet") || DEFAULT_CSV;
+
+    csvUrlInput.value = sheetUrl;
+
+    loadFromCsvUrl(sheetUrl, true).catch(err=>{
+        updateStatus.textContent = "✗ 自動取得エラー：" + err.message;
+        updateStatus.className = "update-status err";
+    });
+})();
