@@ -138,8 +138,7 @@
 </header>
 
 <div class="update-bar">
-  <label class="file-btn" for="fileInput">📂 Excelファイルを読み込む（自分のブラウザだけ反映）</label>
-  <input id="fileInput" type="file" accept=".xlsx" style="display:none">
+
   <button id="settingsBtn" class="file-btn secondary">🔗 全員に自動反映するリンクを作る</button>
   <span id="updateStatus" class="update-status">現在：サンプルデータを表示中</span>
 </div>
@@ -346,45 +345,6 @@ async function loadFromCsvUrl(url, silent){
   applyNewPeople(newPeople, 'Googleシート連携');
 }
 
-// ---- ローカルExcelファイル読み込み（このブラウザのみ反映） ----
-const fileInput = document.getElementById('fileInput');
-const SHEET_NAME = "個人別スキルグラフ";
-const FIRST_DATA_ROW = 5;
-const LAST_DATA_ROW = 59;
-const COLS = ["C","D","E","F","G"];
-
-fileInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
-  updateStatus.textContent = "読み込み中...";
-  updateStatus.className = "update-status";
-  const reader = new FileReader();
-  reader.onload = (evt) => {
-    try{
-      const data = new Uint8Array(evt.target.result);
-      const wb = XLSX.read(data, {type:'array'});
-      const ws = wb.Sheets[SHEET_NAME];
-      if(!ws) throw new Error(`「${SHEET_NAME}」シートが見つかりません`);
-      const newPeople = [];
-      for(let r = FIRST_DATA_ROW; r <= LAST_DATA_ROW; r++){
-        const nameCell = ws["B"+r];
-        if(!nameCell || !nameCell.v) continue;
-        const values = COLS.map(col => {
-          const c = ws[col+r];
-          const v = c ? Number(c.v) : 0;
-          return Math.round(v * 1000) / 10;
-        });
-        newPeople.push({ name: String(nameCell.v), values });
-      }
-      if(newPeople.length === 0) throw new Error("データ行が見つかりませんでした");
-      applyNewPeople(newPeople, file.name + '（このブラウザのみ）');
-    }catch(err){
-      updateStatus.textContent = "✗ 読み込みエラー：" + err.message;
-      updateStatus.className = "update-status err";
-    }
-  };
-  reader.readAsArrayBuffer(file);
-});
 
 // ---- 共有リンク設定パネル ----
 const settingsBtn = document.getElementById('settingsBtn');
