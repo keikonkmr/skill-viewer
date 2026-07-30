@@ -198,10 +198,22 @@ function computeRanks(){
     avg: p.values.reduce((a,b)=>a+b,0) / p.values.length,
     origIdx: idx
   }));
+
   const ranked = [...withAvg].sort((a,b)=> b.avg - a.avg);
-  ranked.forEach((p,i)=>{ p.rank = i+1; });
+
+  let currentRank = 1;
+
+  ranked.forEach((p, i) => {
+    if(i > 0 && p.avg !== ranked[i-1].avg){
+      currentRank = i + 1;
+    }
+    p.rank = currentRank;
+  });
+
   rankMap = {};
-  ranked.forEach(p => rankMap[p.origIdx] = p.rank);
+  ranked.forEach(p => {
+    rankMap[p.origIdx] = p.rank;
+  });
 }
 computeRanks();
 
