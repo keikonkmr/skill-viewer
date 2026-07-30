@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人別スキルグラフ ビューア</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --navy:#1F3864;
+    --navy-light:#2E5395;
+    --bg:#F4F6FA;
+    --card:#FFFFFF;
+    --border:#DCE3EE;
+    --text:#24304A;
+    --muted:#6B7A99;
+    --accent:#1F3864;
+    --gold:#F2C744;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Hiragino Sans","Meiryo",sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+  header{
+    background:var(--navy); color:#fff; padding:18px 24px;
+  }
+  header h1{ margin:0; font-size:19px; font-weight:700; }
+  header p{ margin:4px 0 0; font-size:12.5px; color:#C9D4EA; }
+
+  .update-bar{
+    padding:10px 24px; background:#EAF0FB; border-bottom:1px solid var(--border);
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+  }
+  .file-btn{
+    background:var(--navy); color:#fff; padding:8px 16px; border-radius:8px;
+    font-size:13px; cursor:pointer; font-weight:600; white-space:nowrap;
+  }
+  .file-btn:hover{ background:var(--navy-light); }
+  .file-btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  .file-btn.secondary:hover{ background:#EEF2FB; }
+  .update-status{ font-size:12.5px; color:var(--muted); }
+  .update-status.ok{ color:#2E7D32; font-weight:600; }
+  .update-status.err{ color:#C0392B; font-weight:600; }
+
+  .settings-panel{
+    padding:16px 24px; background:#FFFBEA; border-bottom:1px solid var(--border);
+  }
+  .settings-desc{ font-size:12.5px; color:var(--text); margin:0 0 10px; line-height:1.6; }
+  .settings-row{ display:flex; gap:8px; }
+  .settings-row input{
+    flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px;
+  }
+  .settings-row button, #copyLinkBtn{
+    padding:8px 16px; border-radius:8px; border:none; background:var(--navy); color:#fff;
+    font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  #generatedLinkWrap{ display:flex; gap:8px; margin-top:10px; }
+  #generatedLink{
+    flex:1; padding:8px 12px; border:1px solid #B7D9BD; border-radius:8px; font-size:13px;
+    background:#F1FAF2;
+  }
+  .settings-error{ color:#C0392B; font-size:12.5px; margin:8px 0 0; }
+
+  .search-bar{
+    padding:12px 24px; background:var(--card); border-bottom:1px solid var(--border);
+    display:flex; gap:10px; align-items:center; position:sticky; top:0; z-index:5;
+  }
+  .search-bar input{
+    flex:1; max-width:360px; padding:8px 12px; border:1px solid var(--border);
+    border-radius:8px; font-size:14px; outline:none;
+  }
+  .search-bar input:focus{ border-color:var(--navy-light); }
+  .count-badge{ font-size:12.5px; color:var(--muted); }
+
+  .tabs{
+    display:flex; overflow-x:auto; gap:6px; padding:10px 24px;
+    background:var(--card); border-bottom:1px solid var(--border);
+    white-space:nowrap;
+  }
+  .tabs::-webkit-scrollbar{ height:6px; }
+  .tabs::-webkit-scrollbar-thumb{ background:#C7D1E3; border-radius:4px; }
+  .tab{
+    padding:7px 14px; border-radius:20px; font-size:13px; cursor:pointer;
+    border:1px solid var(--border); background:#F1F4FA; color:var(--text);
+    flex:0 0 auto; transition:.15s;
+  }
+  .tab:hover{ background:#E4EAF7; }
+  .tab.active{ background:var(--navy); color:#fff; border-color:var(--navy); font-weight:700; }
+
+  .main{
+    max-width:1000px; margin:0 auto; padding:28px 20px 60px;
+    display:grid; grid-template-columns: 1.1fr .9fr; gap:24px;
+  }
+  @media (max-width: 760px){ .main{ grid-template-columns: 1fr; } }
+
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:20px; box-shadow:0 2px 10px rgba(31,56,100,.05);
+  }
+  .name-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px;}
+  .name-row h2{ margin:0; font-size:22px; }
+  .rank-pill{
+    font-size:12.5px; background:#EEF2FB; color:var(--navy); padding:4px 10px;
+    border-radius:20px; font-weight:700; white-space:nowrap;
+  }
+  .avg-line{ font-size:13px; color:var(--muted); margin-bottom:10px; }
+  .avg-line b{ color:var(--navy); font-size:16px; }
+
+  canvas{ max-width:100%; }
+
+  table.detail{ width:100%; border-collapse:collapse; font-size:13.5px; margin-top:4px;}
+  table.detail th, table.detail td{
+    text-align:left; padding:9px 6px; border-bottom:1px solid var(--border);
+  }
+  table.detail th{ color:var(--muted); font-weight:600; font-size:12px; }
+  table.detail td.val{ text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+  .bar-wrap{ background:#EEF1F7; border-radius:5px; height:8px; margin-top:4px; overflow:hidden;}
+  .bar-fill{ height:100%; background:var(--navy-light); border-radius:5px; }
+
+  .nav-btns{ display:flex; gap:8px; margin-top:16px; }
+  .nav-btns button{
+    flex:1; padding:10px; border-radius:8px; border:1px solid var(--border);
+    background:#F1F4FA; cursor:pointer; font-size:13.5px; color:var(--text);
+  }
+  .nav-btns button:hover{ background:#E4EAF7; }
+
+  footer{ text-align:center; color:var(--muted); font-size:12px; padding:20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>👤 個人別スキルグラフ ビューア</h1>
+  <p>各カテゴリで「2＝合格」に到達した割合を表示（3＝指導者レベルは教育・指導者ダッシュボードで別管理）</p>
+</header>
+
+<div class="update-bar">
+  <label class="file-btn" for="fileInput">📂 Excelファイルを読み込む（自分のブラウザだけ反映）</label>
+  <input id="fileInput" type="file" accept=".xlsx" style="display:none">
+  <button id="settingsBtn" class="file-btn secondary">🔗 全員に自動反映するリンクを作る</button>
+  <span id="updateStatus" class="update-status">現在：サンプルデータを表示中</span>
+</div>
+
+<div id="settingsPanel" class="settings-panel" style="display:none">
+  <p class="settings-desc">GoogleスプレッドシートでCSV公開したURLを貼り付けてください。「リンクを作成」を押すと、そのURLが埋め込まれた共有用リンクが発行されます。<b>そのリンクを社内で共有してください。</b>（Googleシート更新時に、リンクを開いた全員へ自動反映されます）</p>
+  <div class="settings-row">
+    <input id="csvUrlInput" type="text" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
+    <button id="makeLinkBtn">リンクを作成</button>
+  </div>
+  <div id="generatedLinkWrap" style="display:none">
+    <input id="generatedLink" type="text" readonly>
+    <button id="copyLinkBtn">コピー</button>
+  </div>
+  <p id="settingsError" class="settings-error"></p>
+</div>
+
+<div class="search-bar">
+  <input id="searchBox" type="text" placeholder="スタッフ名で検索...">
+  <span class="count-badge" id="countBadge"></span>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="main">
+  <div class="card">
+    <div class="name-row">
+      <h2 id="personName">-</h2>
+      <span class="rank-pill" id="rankPill">-</span>
+    </div>
+    <div class="avg-line">5カテゴリ平均達成率　<b id="avgVal">-</b></div>
+    <canvas id="radarChart" height="300"></canvas>
+    <div class="nav-btns">
+      <button id="prevBtn">← 前の人</button>
+      <button id="nextBtn">次の人 →</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <table class="detail" id="detailTable">
+      <thead><tr><th>カテゴリ</th><th style="text-align:right">達成率</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<footer>個人別スキルグラフ（トレーニング進捗管理表）連動ビューア ／ 数値は評価入力から自動集計</footer>
+
+<script>
+let PEOPLE = [{"name": "多賀 宇問", "values": [100, 100, 100, 56.5, 0]}, {"name": "敷田 滋久", "values": [87.5, 71.4, 62.5, 39.1, 0]}, {"name": "益田 みつ", "values": [100, 57.1, 62.5, 95.7, 8.3]}, {"name": "冨士本 ゆか", "values": [93.8, 42.9, 87.5, 100, 0]}, {"name": "福田 美絵", "values": [100, 42.9, 62.5, 95.7, 8.3]}, {"name": "澤田　玲子", "values": [100, 42.9, 62.5, 100, 0]}, {"name": "右幸 美代子", "values": [100, 42.9, 62.5, 100, 100]}, {"name": "山田 奈々", "values": [100, 42.9, 62.5, 100, 100]}, {"name": "山崎 直美", "values": [100, 42.9, 62.5, 100, 100]}, {"name": "熊元 里奈", "values": [100, 42.9, 62.5, 100, 100]}, {"name": "高瀬 美保", "values": [100, 42.9, 62.5, 100, 100]}, {"name": "木下 千紘", "values": [93.8, 42.9, 62.5, 91.3, 50.0]}, {"name": "頼経 梨菜", "values": [100, 42.9, 100, 100, 0]}, {"name": "寺山 文子", "values": [100, 28.6, 62.5, 82.6, 50.0]}, {"name": "広瀬 瑠衣", "values": [100, 42.9, 62.5, 87.0, 33.3]}, {"name": "黒木 彩子", "values": [100, 28.6, 62.5, 87.0, 33.3]}, {"name": "井上 利恵", "values": [62.5, 0, 62.5, 8.7, 75.0]}, {"name": "尾高 義幸", "values": [100, 0, 62.5, 78.3, 0]}, {"name": "橋本 楽生", "values": [100, 14.3, 62.5, 60.9, 0]}, {"name": "金光 宏", "values": [100, 0, 62.5, 8.7, 0]}, {"name": "徐 再礼", "values": [100, 14.3, 62.5, 69.6, 0]}, {"name": "川本 幹雄", "values": [100, 14.3, 62.5, 82.6, 0]}, {"name": "渡邊 花奈", "values": [100, 42.9, 62.5, 82.6, 0]}, {"name": "臼井 優子", "values": [100, 42.9, 100, 100, 0]}, {"name": "LIU WENHUANG", "values": [93.8, 28.6, 62.5, 82.6, 0]}, {"name": "原田 楓子", "values": [100, 42.9, 62.5, 91.3, 0]}, {"name": "福原 楓花", "values": [93.8, 42.9, 62.5, 87.0, 0]}, {"name": "吉田 順子", "values": [100, 42.9, 62.5, 78.3, 0]}, {"name": "永田 美友樹", "values": [100, 42.9, 62.5, 100, 0]}, {"name": "浦木 あすな", "values": [100, 28.6, 62.5, 65.2, 0]}, {"name": "上田 香恵", "values": [100, 14.3, 62.5, 69.6, 0]}, {"name": "森下 千奈実", "values": [100, 0, 62.5, 69.6, 0]}, {"name": "末口 結南", "values": [81.2, 42.9, 87.5, 91.3, 0]}, {"name": "後藤 賢吾", "values": [87.5, 42.9, 62.5, 95.7, 0]}, {"name": "許 理栄", "values": [100, 0, 62.5, 78.3, 0]}, {"name": "平田 寿子", "values": [100, 0, 62.5, 78.3, 0]}, {"name": "前田 隼輔", "values": [62.5, 0, 50.0, 4.3, 0]}, {"name": "向井 暁", "values": [100, 0, 50.0, 82.6, 0]}, {"name": "田中 悠子", "values": [100, 0, 62.5, 65.2, 0]}, {"name": "兼平 周", "values": [100, 0, 50.0, 73.9, 0]}, {"name": "森本 秀和", "values": [100, 0, 50.0, 65.2, 0]}, {"name": "中山 ひろみ", "values": [93.8, 0, 50.0, 47.8, 0]}, {"name": "島田 海人", "values": [100, 0, 50.0, 17.4, 0]}, {"name": "大出 征平", "values": [81.2, 14.3, 62.5, 4.3, 0]}, {"name": "森 健太", "values": [81.2, 14.3, 50.0, 39.1, 0]}, {"name": "小林 楓", "values": [75.0, 0, 62.5, 43.5, 0]}, {"name": "中村 恵子", "values": [75.0, 0, 50.0, 8.7, 58.3]}, {"name": "西林 ゆかり", "values": [75.0, 0, 62.5, 8.7, 0]}, {"name": "山下 亜希子", "values": [75.0, 0, 50.0, 8.7, 0]}, {"name": "千葉 洋子", "values": [75.0, 0, 50.0, 8.7, 0]}, {"name": "下浦 加都子", "values": [75.0, 0, 50.0, 8.7, 0]}, {"name": "久永 麻千子", "values": [75.0, 0, 50.0, 8.7, 0]}, {"name": "中野 早苗", "values": [6.2, 0, 50.0, 0, 0]}, {"name": "平馬 由佳", "values": [6.2, 0, 50.0, 0, 0]}, {"name": "小山 佑太", "values": [6.2, 0, 50.0, 0, 0]}]
+;
+const LABELS = ["基本姿勢","入荷・荷受け","在庫管理","ピッキング・梱包","ラッピング"];
+
+let rankMap = {};
+function computeRanks(){
+  const withAvg = PEOPLE.map((p, idx) => ({
+    avg: p.values.reduce((a,b)=>a+b,0) / p.values.length,
+    origIdx: idx
+  }));
+  const ranked = [...withAvg].sort((a,b)=> b.avg - a.avg);
+  ranked.forEach((p,i)=>{ p.rank = i+1; });
+  rankMap = {};
+  ranked.forEach(p => rankMap[p.origIdx] = p.rank);
+}
+computeRanks();
+
+let currentIdx = 0;
+let chartObj = null;
+
+const tabsEl = document.getElementById('tabs');
+const searchBox = document.getElementById('searchBox');
+const countBadge = document.getElementById('countBadge');
+
+function renderTabs(filter=""){
+  tabsEl.innerHTML = "";
+  const f = filter.trim();
+  let shown = 0;
+  PEOPLE.forEach((p, i) => {
+    if(f && !p.name.includes(f)) return;
+    shown++;
+    const btn = document.createElement('div');
+    btn.className = 'tab' + (i===currentIdx ? ' active' : '');
+    btn.textContent = p.name;
+    btn.onclick = () => selectPerson(i);
+    tabsEl.appendChild(btn);
+  });
+  countBadge.textContent = `${shown} / ${PEOPLE.length} 名`;
+}
+
+function selectPerson(i){
+  currentIdx = i;
+  const p = PEOPLE[i];
+  document.getElementById('personName').textContent = p.name;
+  document.getElementById('rankPill').textContent = `全体 ${rankMap[i]} 位 / ${PEOPLE.length}名`;
+  const avg = p.values.reduce((a,b)=>a+b,0)/p.values.length;
+  document.getElementById('avgVal').textContent = avg.toFixed(1) + '%';
+
+  const tbody = document.querySelector('#detailTable tbody');
+  tbody.innerHTML = "";
+  LABELS.forEach((label, idx) => {
+    const v = p.values[idx];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${label}<div class="bar-wrap"><div class="bar-fill" style="width:${v}%"></div></div></td>
+                    <td class="val">${v}%</td>`;
+    tbody.appendChild(tr);
+  });
+
+  drawChart(p);
+  renderTabs(searchBox.value);
+  // 選択タブをスクロール表示
+  const active = tabsEl.querySelector('.tab.active');
+  if(active) active.scrollIntoView({inline:'center', block:'nearest', behavior:'smooth'});
+}
+
+function drawChart(p){
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  if(chartObj) chartObj.destroy();
+  chartObj = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: LABELS,
+      datasets: [{
+        label: p.name,
+        data: p.values,
+        backgroundColor: 'rgba(31,56,100,0.18)',
+        borderColor: '#1F3864',
+        borderWidth: 2,
+        pointBackgroundColor: '#1F3864',
+        pointRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display:false } },
+      scales: {
+        r: {
+          min:0, max:100,
+          ticks:{ stepSize:20, backdropColor:'transparent', callback:v=>v+'%' },
+          pointLabels:{ font:{ size:12 } },
+          grid:{ color:'#DCE3EE' },
+          angleLines:{ color:'#DCE3EE' }
+        }
+      }
+    }
+  });
+}
+
+document.getElementById('prevBtn').onclick = () => selectPerson((currentIdx-1+PEOPLE.length)%PEOPLE.length);
+document.getElementById('nextBtn').onclick = () => selectPerson((currentIdx+1)%PEOPLE.length);
+searchBox.addEventListener('input', () => renderTabs(searchBox.value));
+
+const updateStatus = document.getElementById('updateStatus');
+
+// ---- CSVテキストをPEOPLE配列に変換 ----
+function parseCsvToPeople(csvText){
+  const parsed = Papa.parse(csvText, { skipEmptyLines: true });
+  const rows = parsed.data;
+  let headerRowIdx = -1, nameColIdx = -1;
+  for(let r=0; r<rows.length; r++){
+    const idx = rows[r].findIndex(cell => String(cell).trim() === "スタッフ名");
+    if(idx >= 0){ headerRowIdx = r; nameColIdx = idx; break; }
+  }
+  if(headerRowIdx === -1) throw new Error('「スタッフ名」の見出しが見つかりません（シート構成をご確認ください）');
+
+  const valColStart = nameColIdx + 1; // 基本姿勢〜ラッピングは名前列の直後5列
+  const newPeople = [];
+  for(let r = headerRowIdx+1; r < rows.length; r++){
+    const row = rows[r];
+    const name = row[nameColIdx];
+    if(!name || !String(name).trim()) continue;
+    const values = [];
+    for(let c=0; c<5; c++){
+      let raw = row[valColStart + c];
+      if(raw === undefined || raw === null || String(raw).trim() === ""){ values.push(0); continue; }
+      let s = String(raw).replace('%','').trim();
+      let n = parseFloat(s);
+      if(isNaN(n)) n = 0;
+      if(n <= 1) n = n * 100;
+      values.push(Math.round(n*10)/10);
+    }
+    newPeople.push({ name: String(name).trim(), values });
+  }
+  if(newPeople.length === 0) throw new Error('データ行が見つかりませんでした');
+  return newPeople;
+}
+
+function applyNewPeople(newPeople, sourceLabel){
+  PEOPLE = newPeople;
+  computeRanks();
+  currentIdx = 0;
+  renderTabs(searchBox.value);
+  selectPerson(0);
+  updateStatus.textContent = `✓ 更新完了（${PEOPLE.length}名分・${sourceLabel}）`;
+  updateStatus.className = "update-status ok";
+}
+
+async function loadFromCsvUrl(url, silent){
+  if(!silent){ updateStatus.textContent = "読み込み中..."; updateStatus.className = "update-status"; }
+  const bust = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+  const res = await fetch(bust);
+  if(!res.ok) throw new Error('取得に失敗しました（HTTP ' + res.status + '）');
+  const text = await res.text();
+  const newPeople = parseCsvToPeople(text);
+  applyNewPeople(newPeople, 'Googleシート連携');
+}
+
+// ---- ローカルExcelファイル読み込み（このブラウザのみ反映） ----
+const fileInput = document.getElementById('fileInput');
+const SHEET_NAME = "個人別スキルグラフ";
+const FIRST_DATA_ROW = 5;
+const LAST_DATA_ROW = 59;
+const COLS = ["C","D","E","F","G"];
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  updateStatus.textContent = "読み込み中...";
+  updateStatus.className = "update-status";
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const ws = wb.Sheets[SHEET_NAME];
+      if(!ws) throw new Error(`「${SHEET_NAME}」シートが見つかりません`);
+      const newPeople = [];
+      for(let r = FIRST_DATA_ROW; r <= LAST_DATA_ROW; r++){
+        const nameCell = ws["B"+r];
+        if(!nameCell || !nameCell.v) continue;
+        const values = COLS.map(col => {
+          const c = ws[col+r];
+          const v = c ? Number(c.v) : 0;
+          return Math.round(v * 1000) / 10;
+        });
+        newPeople.push({ name: String(nameCell.v), values });
+      }
+      if(newPeople.length === 0) throw new Error("データ行が見つかりませんでした");
+      applyNewPeople(newPeople, file.name + '（このブラウザのみ）');
+    }catch(err){
+      updateStatus.textContent = "✗ 読み込みエラー：" + err.message;
+      updateStatus.className = "update-status err";
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ---- 共有リンク設定パネル ----
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsPanel = document.getElementById('settingsPanel');
+const csvUrlInput = document.getElementById('csvUrlInput');
+const makeLinkBtn = document.getElementById('makeLinkBtn');
+const generatedLinkWrap = document.getElementById('generatedLinkWrap');
+const generatedLink = document.getElementById('generatedLink');
+const copyLinkBtn = document.getElementById('copyLinkBtn');
+const settingsError = document.getElementById('settingsError');
+
+settingsBtn.addEventListener('click', () => {
+  settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+});
+
+makeLinkBtn.addEventListener('click', async () => {
+  settingsError.textContent = "";
+  const url = csvUrlInput.value.trim();
+  if(!url){ settingsError.textContent = "URLを入力してください"; return; }
+  try{
+    await loadFromCsvUrl(url, false);
+    const link = location.origin + location.pathname + "?sheet=" + encodeURIComponent(url);
+    generatedLink.value = link;
+    generatedLinkWrap.style.display = "flex";
+  }catch(err){
+    settingsError.textContent = "✗ " + err.message + "（URLが正しいか、CSV公開設定を確認してください）";
+  }
+});
+
+copyLinkBtn.addEventListener('click', () => {
+  generatedLink.select();
+  document.execCommand('copy');
+  copyLinkBtn.textContent = "コピー済み";
+  setTimeout(()=> copyLinkBtn.textContent = "コピー", 1500);
+});
+
+// ---- ページ読み込み時：共有リンクの ?sheet= があれば自動取得 ----
+const DEFAULT_CSV =
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vRUAzu0sXtYQoWYZVdZRtW9MA69yNN1CigkV6sptWMOWodWj4s2Um-A9dvtlPREaVBKAG2sTMZopi27/pub?gid=1231020551&single=true&output=csv";
+
+(function init(){
+    const params = new URLSearchParams(location.search);
+    const sheetUrl = params.get("sheet") || DEFAULT_CSV;
+
+    csvUrlInput.value = sheetUrl;
+
+    loadFromCsvUrl(sheetUrl, true).catch(err=>{
+        updateStatus.textContent = "✗ 自動取得エラー：" + err.message;
+        updateStatus.className = "update-status err";
+    });
+})();
+
+selectPerson(0);
+</script>
+</body>
+</html>
